@@ -15,11 +15,10 @@ jobs:
         uses: taiki-e/install-action@cargo-llvm-cov
       - name: Setup parquet files
         run: |
-          apt update && apt install python3-pip python3-venv -y -q
           python3 -m venv venv
           source venv/bin/activate
           pip install pip --upgrade
-          pip install pyarrow==6
+          pip install pyarrow
           python tests/write_pyarrow.py
           deactivate
       - uses: Swatinem/rust-cache@v1
