@@ -91,8 +91,8 @@ def case_struct(size):
     boolean = [True, None, False, False, None, True, None, None, True, True]
     validity = [True, False, False, False, False, False, False, False, False, False]
     struct_fields = [
-        ("f1", pa.utf8()),
-        ("f2", pa.bool_()),
+        pa.field("f1", pa.utf8()),
+        pa.field("f2", pa.bool_()),
     ]
     fields = [
         pa.field(
@@ -136,14 +136,34 @@ def write_pyarrow(
 
     t = pa.table(data, schema=schema)
     os.makedirs(base_path, exist_ok=True)
+    # pyarrow >= 8 dropped "2.0"; use "2.4" for v2 pages (superset of "2.0")
+    format_version = "1.0" if page_version == 1 else "2.4"
+    # pyarrow >= 8 defaults to pure RLE for booleans in v2 data pages, which
+    # parquet2 does not yet support. Force PLAIN so the page uses RLE+PLAIN
+    # (same as v1), but only when not using dictionary (column_encoding is
+    # incompatible with use_dictionary=True).
+    column_encoding = None
+    if page_version == 2 and not use_dictionary:
+        column_encoding = {
+            f.name: "PLAIN"
+            for f in schema
+            if f.type == pa.bool_()
+        }
+        # Also handle nested boolean fields (e.g. struct columns)
+        for f in schema:
+            if pa.types.is_struct(f.type):
+                for sf in f.type:
+                    if sf.type == pa.bool_():
+                        column_encoding[f"{f.name}.{sf.name}"] = "PLAIN"
     pa.parquet.write_table(
         t,
         f"{base_path}/{path}",
-        version=f"{page_version}.0",
+        version=format_version,
         data_page_version=f"{page_version}.0",
         write_statistics=True,
         compression=compression,
         use_dictionary=use_dictionary,
+        column_encoding=column_encoding,
     )
 
 
